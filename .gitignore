@@ -35,7 +35,7 @@ htmlcov/
 
 # Environment variables and secrets
 .env
-.env.*
+*.env
 secrets.yaml
 
 # OS files
