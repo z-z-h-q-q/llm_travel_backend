@@ -196,3 +196,240 @@ async def plan_by_coza(basic_info: Dict[str, Any]) -> Dict[str, Any]:
         logger.error("Validation of TravelPlan failed: %s", ve.json())
         # attach the raw candidate to exception for caller inspection
         raise
+
+
+async def parse_basicinfo_with_xinghuo(text: str) -> Dict[str, Any]:
+    """Parse free-form text into BasicInfo using a configured LLM (e.g. 星火 Lite).
+
+    This function expects `settings.XINGHUO_API_URL` and `settings.XINGHUO_API_KEY`
+    to be set. It will send an instruction prompt asking the model to return
+    a JSON object matching the BasicInfo schema. On failure it falls back to
+    a simple heuristic parser `basicinfo_from_text` from app.utils.
+    """
+    from ..utils import basicinfo_from_text
+    if not settings.XINGHUO_API_URL:
+        logger.warning("XINGHUO_API_URL not configured; falling back to heuristic parser")
+        return basicinfo_from_text(text)
+
+    prompt = (
+        "You are an information-extraction assistant. Given a user's free-form travel request,"
+        " output ONLY a single JSON object (no explanations) that matches the following schema:\n"
+        "{\n"
+        "  \"departure\": string or null,\n"
+        "  \"destination\": string (required),\n"
+        "  \"travelers\": integer or null,\n"
+        "  \"startDate\": string (YYYY-MM-DD) or null,\n"
+        "  \"endDate\": string (YYYY-MM-DD) or null,\n"
+        "  \"days\": integer or null,\n"
+        "  \"preferences\": array of short strings or empty array,\n"
+        "  \"budget\": number (in CNY) or null\n"
+        "}\n"
+        "Rules:\n"
+        "- If a date range can be unambiguously inferred from the text, fill startDate and endDate in YYYY-MM-DD format and compute days.\n"
+        "- If only a duration (e.g. 'five days') is given, set days accordingly and leave startDate/endDate null unless a specific start date is mentioned.\n"
+        "- If the number of travelers or budget is not specified, set them to null (do not invent exact numbers). If the user says '我和两个朋友', that means travelers=3.\n"
+        "- preferences should be short tags like ['美食','人文','轻松','自然'] extracted from intent. If none, return an empty array.\n"
+        "- budget: prefer a numeric value in CNY; if user says '一万五', interpret as 15000.0.\n"
+        "- DO NOT include any commentary, only the JSON object.\n\n"
+        "Language rules:\n"
+        "- If the input text is in Chinese, produce the JSON field values (strings and preference tags) in Chinese. If the input is in another language, respond in that language.\n\n"
+        f"Input: {text}"
+    )
+    headers = {
+        "Authorization": f"Bearer {settings.XINGHUO_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    # Basic language detection: if the input contains CJK characters, prefer Chinese
+    import re
+    is_chinese = bool(re.search(r"[\u4e00-\u9fff]", text))
+
+    if is_chinese:
+        # Prepend a short instruction to ensure Chinese responses for values
+        prompt = "请注意：输入为中文，请用中文填写下列 JSON 对象的字段值（保留字段名为英文）。（不要输出任何解释）\n\n" + prompt
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            # The exact request shape may depend on the LLM provider. We send a
+            # generic JSON payload {"prompt": ...} and expect a text response
+            # containing JSON. Adjust this to match the provider API you use.
+            # Xinghuo expects an OpenAI-like chat request with model and messages
+            body = {
+                "model": settings.XINGHUO_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                # do not use stream in this server-to-server call
+                "stream": False,
+            }
+            resp = await client.post(settings.XINGHUO_API_URL, json=body, headers=headers)
+            text_out = resp.text
+            print(text_out)
+            # If provider returned an error (4xx/5xx), log the body for debugging
+            if resp.status_code >= 400:
+                try:
+                    logger.error("Xinghuo LLM returned HTTP %s: %s", resp.status_code, resp.text)
+                    # try to log parsed JSON error if any
+                    errjson = resp.json()
+                    logger.error("Xinghuo error JSON: %s", errjson)
+                except Exception:
+                    logger.exception("Failed to parse Xinghuo error body")
+                # raise to trigger fallback
+                resp.raise_for_status()
+
+            # Try to locate JSON in the response
+            import json
+
+            try:
+                parsed = resp.json()
+                candidate_text = None
+
+                # If choices (chat response), extract content
+                if isinstance(parsed, dict) and "choices" in parsed and isinstance(parsed["choices"], list) and parsed["choices"]:
+                    first = parsed["choices"][0]
+                    # new-style: {message: {content: ...}}
+                    if isinstance(first, dict):
+                        msg = first.get("message") or first.get("delta") or first
+                        if isinstance(msg, dict):
+                            candidate_text = msg.get("content") or msg.get("text") or None
+                        else:
+                            candidate_text = first.get("text") or None
+                    else:
+                        candidate_text = str(first)
+                else:
+                    # fallback: check common keys
+                    for k in ("output", "result", "data", "text", "content"):
+                        if k in parsed:
+                            candidate_text = parsed[k]
+                            break
+
+                # candidate_text may be a string or nested structure
+                if isinstance(candidate_text, list):
+                    candidate_text = candidate_text[0] if candidate_text else None
+
+                if isinstance(candidate_text, dict):
+                    basic = candidate_text
+                elif isinstance(candidate_text, str):
+                    # strip markdown code fences and leading/trailing whitespace
+                    ct = candidate_text.strip()
+                    # remove ```json or ``` markers if present
+                    if ct.startswith("```") and ct.endswith("```"):
+                        # remove the fences and optional language marker
+                        inner = ct[3:-3].lstrip()
+                        # if inner starts with language like json, strip the first token
+                        inner = inner
+                        m = None
+                        try:
+                            # try to detect a leading language token like 'json' or 'json\n'
+                            import re as _re
+
+                            m = _re.match(r"^\s*([a-zA-Z0-9_+-]+)\s*\n(.*)$", inner, _re.S)
+                        except Exception:
+                            m = None
+                        if m:
+                            ct = m.group(2).strip()
+                        else:
+                            ct = inner.strip()
+                    # attempt to load JSON from the cleaned string
+                    try:
+                        basic = json.loads(ct)
+                    except Exception:
+                        basic = None
+                else:
+                    # no candidate_text extracted; try to find JSON in resp.text
+                    basic = None
+
+                if isinstance(basic, dict):
+                    # if destination missing or null, fallback to heuristic parser
+                    if not basic.get("destination"):
+                        logger.warning("Parsed JSON missing destination; falling back to heuristic parser")
+                        return basicinfo_from_text(text)
+                    return _normalize_basicinfo(basic)
+
+            except Exception:
+                # resp.json() failed; fall back to parsing resp.text
+                pass
+
+            # last resort: try to extract JSON substring from resp.text
+            try:
+                import re
+
+                m = re.search(r"(\{[\s\S]*\})", text_out, re.S)
+                if m:
+                    basic = json.loads(m.group(1))
+                    return _normalize_basicinfo(basic)
+            except Exception:
+                logger.exception("Failed to parse JSON from LLM response")
+
+    except Exception as e:
+        logger.exception("Xinghuo LLM call failed: %s", e)
+
+    # Fallback heuristic
+    logger.warning("Falling back to heuristic basicinfo_from_text")
+    return basicinfo_from_text(text)
+
+
+def _normalize_basicinfo(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure the returned dict contains the required keys and correct types.
+
+    Fields not present will be set to None (except destination must be present
+    and left as-is). This function is defensive against various LLM output
+    shapes.
+    """
+    def to_int(v):
+        try:
+            if v is None or v == "":
+                return None
+            return int(v)
+        except Exception:
+            try:
+                return int(float(v))
+            except Exception:
+                return None
+
+    def to_float(v):
+        try:
+            if v is None or v == "":
+                return None
+            return float(v)
+        except Exception:
+            return None
+
+    def to_list_of_str(v):
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        if isinstance(v, str):
+            # split common delimiters
+            parts = [p.strip() for p in v.replace('，', ',').split(',') if p.strip()]
+            return parts
+        return []
+
+    result = {
+        "departure": raw.get("departure") if raw.get("departure") not in ("", None) else None,
+        "destination": raw.get("destination") or raw.get("place") or raw.get("city") or None,
+        "travelers": to_int(raw.get("travelers")) if raw.get("travelers") is not None else None,
+        "startDate": raw.get("startDate") or raw.get("start_date") or None,
+        "endDate": raw.get("endDate") or raw.get("end_date") or None,
+        "days": to_int(raw.get("days")) if raw.get("days") is not None else None,
+    # preferences is optional; return None if not provided
+    "preferences": to_list_of_str(raw.get("preferences")) if raw.get("preferences") is not None and raw.get("preferences") != "" else None,
+        "budget": to_float(raw.get("budget")) if raw.get("budget") is not None else None,
+    }
+
+    # If days is missing but startDate and endDate present, compute days
+    try:
+        if result.get("days") in (None, 0) and result.get("startDate") and result.get("endDate"):
+            from datetime import datetime
+            fmt = "%Y-%m-%d"
+            try:
+                sd = datetime.strptime(result["startDate"], fmt)
+                ed = datetime.strptime(result["endDate"], fmt)
+                delta = (ed - sd).days
+                result["days"] = delta if delta > 0 else None
+            except Exception:
+                # leave days as-is
+                pass
+    except Exception:
+        pass
+
+    return result

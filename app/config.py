@@ -23,6 +23,15 @@ class Settings(BaseSettings):
 
     # 高德地图 (Amap) API
     AMAP_KEY: str = ""
+
+    # 星火 / 其他 LLM API (可配置为星火 Lite 的 HTTP 接口)
+    # Example: XINGHUO_API_URL=https://api.example.com/v1/models/xinghuo-lite/chat
+    XINGHUO_API_URL: str = ""
+    # Bearer token or API key for the LLM provider. The provider may expect a
+    # specific header; this code will send it as Authorization: Bearer <key>.
+    XINGHUO_API_KEY: str = ""
+    # Default model to call on the Xinghuo API (e.g. generalv3.5)
+    XINGHUO_MODEL: str = "generalv3.5"
     # NOTE: Server-side speech recognition provider (previously iFlyTek/XUNFEI)
     # has been removed from the codebase. Use the browser Web Speech API
     # (client-side) or configure an alternative provider if you require

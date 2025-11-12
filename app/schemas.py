@@ -5,12 +5,16 @@ from typing import List, Optional, Any
 class BasicInfo(BaseModel):
     departure: Optional[str]
     destination: str
-    travelers: int
-    startDate: str
-    endDate: str
-    days: int
-    preferences: List[str]
-    budget: float
+    # The following fields are required to be present in the JSON payload
+    # but may be null when unknown. Declaring them as Optional without a
+    # default makes them required keys that accept null values.
+    travelers: Optional[int]
+    startDate: Optional[str]
+    endDate: Optional[str]
+    days: Optional[int]
+    # Optional fields
+    preferences: Optional[List[str]]
+    budget: Optional[float]
 
 
 class DestinationIntro(BaseModel):
