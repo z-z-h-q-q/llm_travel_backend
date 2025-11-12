@@ -5,13 +5,16 @@ This backend provides:
 - Travel plan CRUD (/travel/plans)
 - AI planning endpoint (/ai/plan) to call coza agent
 - Map routing (/map/route) using Amap (高德)
-- Speech recognition endpoint (/speech/recognize) placeholder for iFlyTek
+-- Speech recognition endpoint (/speech/recognize) was previously a placeholder for iFlyTek.
+	Server-side ASR integration has been removed from this deployment. Use the
+	browser Web Speech API (client-side) for microphone input, or configure
+	an alternative server-side provider and add its integration yourself.
 
 Environment variables (use `.env`):
 
 - COZA_AGENT_URL, COZA_API_KEY
 - AMAP_KEY
-- XUNFEI_APPID, XUNFEI_API_KEY
+- (Deprecated) XUNFEI_APPID, XUNFEI_API_KEY - server-side iFlyTek keys have been removed
 - JWT_SECRET
 - DATABASE_URL (default sqlite:///./travel.db)
 

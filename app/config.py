@@ -23,15 +23,11 @@ class Settings(BaseSettings):
 
     # 高德地图 (Amap) API
     AMAP_KEY: str = ""
-
-    # 科大讯飞 (iFlyTek) 语音识别
-    XUNFEI_APPID: str = ""
-    XUNFEI_API_KEY: str = ""
-    # 讯飞 API Secret (用于签名)，控制台创建应用后可获取
-    XUNFEI_API_SECRET: str = ""
-    # 可选：讯飞的 REST 识别和大模型端点（在控制台或代理上配置）
-    XUNFEI_SPEECH_RECOGNITION_URL: str = ""
-    XUNFEI_LLM_URL: str = ""
+    # NOTE: Server-side speech recognition provider (previously iFlyTek/XUNFEI)
+    # has been removed from the codebase. Use the browser Web Speech API
+    # (client-side) or configure an alternative provider if you require
+    # server-side audio transcription. Any remaining environment keys
+    # referencing XUNFEI in .env/.env.example are deprecated and ignored.
 
     # Supabase (optional) - when set, backend will use Supabase REST for cloud sync
     SUPABASE_URL: str = ""
