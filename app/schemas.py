@@ -25,7 +25,6 @@ class Attraction(BaseModel):
     description: Optional[str]
     ticket_price: Optional[float]
     estimated_visit_time: Optional[str]
-    location: Optional[Any] = None
 
 
 class Accommodation(BaseModel):
@@ -41,9 +40,9 @@ class MealInfo(BaseModel):
 
 
 class DayMeals(BaseModel):
-    breakfast: MealInfo
-    lunch: MealInfo
-    dinner: MealInfo
+    breakfast: Optional[MealInfo] = None
+    lunch: Optional[MealInfo] = None
+    dinner: Optional[MealInfo] = None
 
 
 class DayPlan(BaseModel):

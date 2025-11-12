@@ -7,3 +7,6 @@ python-jose==3.3.0
 passlib[bcrypt]==1.7.4
 pydantic==1.10.12
 python-dotenv==1.0.0
+websockets==11.0.3
+psycopg2-binary==2.9.7
+cozepy==0.1.6

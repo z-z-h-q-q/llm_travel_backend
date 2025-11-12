@@ -2,16 +2,35 @@ import httpx
 from ..config import settings
 from typing import Any
 from ..utils import basicinfo_from_text
-from .iflytek_provider import extract_basicinfo_with_iflytek
+from .iflytek_provider import (
+    extract_basicinfo_with_iflytek,
+    recognize_iat_ws_v2,
+)
 
 
 async def recognize_iflytek(audio_bytes: bytes, fmt: str = "wav") -> str:
     """Attempt to transcribe audio using configured iFlyTek speech endpoint.
-    If settings.XUNFEI_SPEECH_RECOGNITION_URL is set, POST multipart/form-data with 'audio'.
+    Prefer direct iFlyTek REST signing call when API credentials are present (XUNFEI_API_KEY and XUNFEI_API_SECRET).
+    Otherwise, if settings.XUNFEI_SPEECH_RECOGNITION_URL is set, POST multipart/form-data with 'audio' to that URL.
     Otherwise raise RuntimeError.
     """
+    # If API key/secret are configured, use the websocket v2 single-frame flow exclusively.
+    # This avoids REST signing/endpoint differences and matches the official demo.
+    if settings.XUNFEI_API_KEY and settings.XUNFEI_API_SECRET:
+        # map common extensions to encoding hint
+        ext = fmt.lower().strip()
+        if ext in ("wav", "pcm"):
+            fmt_hint = "pcm"
+        elif ext in ("mp3", "lame"):
+            fmt_hint = "mp3"
+        else:
+            fmt_hint = "pcm"
+        # Use WS v2 flow; let errors propagate so caller can see upstream errors.
+        return await recognize_iat_ws_v2(audio_bytes, fmt=fmt_hint)
+
+    # Fallback: call a proxy/upload URL if configured
     if not settings.XUNFEI_SPEECH_RECOGNITION_URL:
-        raise RuntimeError("XUNFEI_SPEECH_RECOGNITION_URL not configured")
+        raise RuntimeError("XUNFEI_SPEECH_RECOGNITION_URL not configured and no API secret for direct iFlyTek call")
 
     headers = {}
     if settings.XUNFEI_API_KEY:
