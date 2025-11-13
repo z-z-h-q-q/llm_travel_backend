@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# 使用已推送到阿里云的本地基础镜像
+FROM crpi-qk3obbgceulitt7u.cn-shanghai.personal.cr.aliyuncs.com/llm_course/python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
