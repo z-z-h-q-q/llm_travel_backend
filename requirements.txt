@@ -9,4 +9,3 @@ pydantic==1.10.12
 python-dotenv==1.0.0
 websockets==11.0.3
 psycopg2-binary==2.9.7
-cozepy==0.1.6
