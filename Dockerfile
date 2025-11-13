@@ -1,21 +1,13 @@
-# 使用已推送到阿里云的本地基础镜像
-FROM crpi-qk3obbgceulitt7u.cn-shanghai.personal.cr.aliyuncs.com/llm_course/python:3.11-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# 使用自定义基础镜像
+FROM crpi-qk3obbgceulitt7u.cn-shanghai.personal.cr.aliyuncs.com/llm_course/python:3.11-slim-with-buildtools
 
 WORKDIR /app
 
-# system deps
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# copy dependencies first for caching
+# 复制依赖并安装
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# copy app
+# 复制应用代码
 COPY app ./app
 COPY travel.db ./travel.db
 
