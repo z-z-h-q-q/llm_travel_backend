@@ -1,4 +1,27 @@
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from pydantic import BaseSettings
+
+
+# Load dotenv file if present. Priority:
+# 1. Path specified by ENV_FILE environment variable
+# 2. /run/secrets/.env (Docker secret or mounted file)
+# 3. .env in the repository root
+# We call load_dotenv with override=False so that any environment variables
+# passed to the process (e.g., via `docker run -e`) keep precedence over file values.
+dotenv_candidates = [
+    os.getenv('ENV_FILE'),
+    '/run/secrets/.env',
+    str(Path(__file__).resolve().parents[1] / '.env'),
+    '.env',
+]
+
+for candidate in dotenv_candidates:
+    if candidate and Path(candidate).exists():
+        load_dotenv(dotenv_path=candidate, override=False)
+        break
 
 
 class Settings(BaseSettings):
@@ -32,11 +55,6 @@ class Settings(BaseSettings):
     XINGHUO_API_KEY: str = ""
     # Default model to call on the Xinghuo API (e.g. generalv3.5)
     XINGHUO_MODEL: str = "generalv3.5"
-    # NOTE: Server-side speech recognition provider (previously iFlyTek/XUNFEI)
-    # has been removed from the codebase. Use the browser Web Speech API
-    # (client-side) or configure an alternative provider if you require
-    # server-side audio transcription. Any remaining environment keys
-    # referencing XUNFEI in .env/.env.example are deprecated and ignored.
 
     # Supabase (optional) - when set, backend will use Supabase REST for cloud sync
     SUPABASE_URL: str = ""
@@ -44,9 +62,6 @@ class Settings(BaseSettings):
 
     JWT_SECRET: str = "CHANGE_ME"
     JWT_ALGORITHM: str = "HS256"
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
