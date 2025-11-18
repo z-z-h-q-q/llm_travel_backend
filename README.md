@@ -1,5 +1,31 @@
 # llm_travel backend (Python / FastAPI)
 
+## 运行说明
+
+-- **配置本地supabase数据库**
+```supabase init```
+```supabase start```
+启动成功后，会输出本地服务的访问信息，会用到API URL、Database URL、Publishable key和Secret key
+按照travel_plans.sql，执行sql语句进行建表
+
+- **拉取镜像**：
+```
+docker pull crpi-qk3obbgceulitt7u.cn-shanghai.personal.cr.aliyuncs.com/llm_course/backend:V1.0.1
+```
+- **运行镜像**:
+```
+docker run -d --name travel_backend -p 8000:8000 -e SUPABASE_URL="URL" -e SUPABASE_SERVICE_ROLE_KEY="KEY" -e AMAP_KEY="KEY" -e COZE_API_BASE="KEY" -e COZE_API_TOKEN="TOKEN" -e COZE_WORKFLOW_ID="ID" -e COZE_AGENT_ID="ID" -e APP_ENV="development" -e DATABASE_URL="URL" -e XINGHUO_API_URL="URL" -e XINGHUO_API_KEY="KEY" -e XINGHUO_MODEL="Lite" crpi-qk3obbgceulitt7u.cn-shanghai.personal.cr.aliyuncs.com/llm_course/backend:V1.0.1
+```
+
+-- **容器终端验证服务启动**
+```
+# 进入容器后执行
+curl http://localhost:8000
+```
+若返回{"ok":true,"app":"llm_travel_backend"}，说明后端容器正确启动
+
+## 代码说明
+
 This backend provides:
 - Auth endpoints (register/login)
 - Travel plan CRUD (/travel/plans)
